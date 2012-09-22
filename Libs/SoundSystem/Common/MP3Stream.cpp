@@ -27,6 +27,7 @@ For support and more information about Cafu, visit us at <http://www.cafu.de>.
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
+#include <cstdio>
 
 // #ifdef _WIN32
 // // Under Windows, the mpg123 functions must be properly declared for DLL import.
