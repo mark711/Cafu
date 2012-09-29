@@ -49,8 +49,8 @@ static const int SERVER_RUNMODE=2;
 static const int DefaultRunMode=CLIENT_RUNMODE | SERVER_RUNMODE;
 
 /*static*/ ConVarT Options_RunMode                 ("dlg_RunMode",     DefaultRunMode, ConVarT::FLAG_MAIN_EXE,                            "1 is client-only, 2 is server-only, 3 is both.", 1, 3);
-/*static*/ ConVarT Options_DeathMatchPlayerName    ("dlg_dmPlayerName",      "Player", ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "Player name for the DeathMatch game.");
-/*static*/ ConVarT Options_DeathMatchModelName     ("dlg_dmModelName",        "James", ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "Name of the model to use for the DeathMatch game.");
+/*static*/ ConVarT Options_PlayerName              ("dlg_dmPlayerName",      "Player", ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "Player name.");
+/*static*/ ConVarT Options_PlayerModelName         ("dlg_dmModelName",        "James", ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "Name of the player model.");
 /*static*/ ConVarT Options_ClientFullScreen        ("dlg_clFullScreen",          true, ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "When true, the video mode is changed on startup and fullscreen display is used. Otherwise, Cafu runs in an application window on the desktop.");
 /*static*/ ConVarT Options_ClientWindowSizeX       ("dlg_clWindowSizeX",         1024, ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "The size of the client window in X direction.");
 /*static*/ ConVarT Options_ClientWindowSizeY       ("dlg_clWindowSizeY",          768, ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "The size of the client window in Y direction.");
@@ -62,7 +62,6 @@ static const int DefaultRunMode=CLIENT_RUNMODE | SERVER_RUNMODE;
 /*static*/ ConVarT Options_ClientDisplayBPP        ("dlg_clDisplayBPP",            32, ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "The display depth in bits-per-pixel. Normally use 32, or 0 for system default.", 0, 64);
 /*static*/ ConVarT Options_ClientDisplayRefresh    ("dlg_clDisplayRefresh",         0, ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "The display refresh rate. Use 0 for system default, check with your monitor specs for any other value.");
 /*static*/ ConVarT Options_ClientTextureDetail     ("dlg_clTextureDetail",          0, ConVarT::FLAG_MAIN_EXE | ConVarT::FLAG_PERSISTENT, "0 high detail, 1 medium detail, 2 low detail", 0, 2);
-/*static*/ ConVarT Options_ServerGameName          ("dlg_svGameName",    "DeathMatch", ConVarT::FLAG_MAIN_EXE,                            "Name of the game (MOD) to load.");
 /*static*/ ConVarT Options_ServerWorldName         ("dlg_svWorldName",     "TechDemo", ConVarT::FLAG_MAIN_EXE,                            "Name of the world to load.");
 /*static*/ ConVarT Options_ServerPortNr            ("dlg_svPortNr",             30000, ConVarT::FLAG_MAIN_EXE,                            "Server port number.", 0, 0xFFFF);
 

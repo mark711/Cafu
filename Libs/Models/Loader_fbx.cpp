@@ -23,6 +23,8 @@ For support and more information about Cafu, visit us at <http://www.cafu.de>.
 #ifdef HAVE_FBX_SDK
 #include "MaterialSystem/Material.hpp"
 #include "String.hpp"
+
+#define FBXSDK_NEW_API
 #include "fbxsdk.h"
 
 #if defined(_WIN32) && _MSC_VER<1600
@@ -55,17 +57,17 @@ namespace
     NullStreamT Log;
 #endif
 
-    std::ostream& operator << (std::ostream& os, const KFbxVector4& A)
+    std::ostream& operator << (std::ostream& os, const FbxVector4& A)
     {
         return os << "fbxVec4(" << A[0] << ", " << A[1] << ", " << A[2] << ", " << A[3] << ")";
     }
 
-    std::ostream& operator << (std::ostream& os, const KFbxQuaternion& A)
+    std::ostream& operator << (std::ostream& os, const FbxQuaternion& A)
     {
         return os << "fbxQuat(" << A[0] << ", " << A[1] << ", " << A[2] << ", " << A[3] << ")";
     }
 
-    Vector3fT conv(const KFbxVector4& V)
+    Vector3fT conv(const FbxVector4& V)
     {
         return Vector3dT(V[0], V[1], V[2]).AsVectorOfFloat();
     }
@@ -99,10 +101,10 @@ class LoaderFbxT::FbxSceneT
     ~FbxSceneT();
 
     /// Returns the root node of this scene.
-    const KFbxNode* GetRootNode() const { return m_Scene->GetRootNode(); }
+    const FbxNode* GetRootNode() const { return m_Scene->GetRootNode(); }
 
-    /// Recursively loads the joints, beginning at the given KFbxNode instance and the given parent index.
-    void Load(ArrayT<CafuModelT::JointT>& Joints, int ParentIndex, const KFbxNode* Node) const;
+    /// Recursively loads the joints, beginning at the given FbxNode instance and the given parent index.
+    void Load(ArrayT<CafuModelT::JointT>& Joints, int ParentIndex, const FbxNode* Node) const;
 
     /// Loads the meshes.
     void Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialManagerImplT& MaterialMan) const;
@@ -114,27 +116,27 @@ class LoaderFbxT::FbxSceneT
     private:
 
     void CleanUp();
-    void GetNodes(const KFbxNode* Node);
-    void ConvertNurbsAndPatches(KFbxNode* Node);
-    void GetWeights(const KFbxMesh* Mesh, const unsigned long MeshNodeNr, ArrayT< ArrayT<CafuModelT::MeshT::WeightT> >& Weights) const;
-    bool LoadMaterial(MaterialT& Mat, const KFbxSurfaceMaterial* FbxMaterial) const;
-    ArrayT< ArrayT<PosQtrScaleT> > GetSequData(KFbxAnimStack* AnimStack, const ArrayT<KTime>& FrameTimes) const;
+    void GetNodes(const FbxNode* Node);
+    void ConvertNurbsAndPatches(FbxNode* Node);
+    void GetWeights(const FbxMesh* Mesh, const unsigned long MeshNodeNr, ArrayT< ArrayT<CafuModelT::MeshT::WeightT> >& Weights) const;
+    bool LoadMaterial(MaterialT& Mat, const FbxSurfaceMaterial* FbxMaterial) const;
+    ArrayT< ArrayT<PosQtrScaleT> > GetSequData(FbxAnimStack* AnimStack, const ArrayT<FbxTime>& FrameTimes) const;
 
-    const LoaderFbxT&       m_MainClass;
-    UserCallbacksI&         m_UserCallbacks;    ///< Interface to get the password from the user.
-    KFbxSdkManager*         m_SdkManager;
-    KFbxScene*              m_Scene;
-    KFbxImporter*           m_Importer;
-    ArrayT<const KFbxNode*> m_Nodes;
+    const LoaderFbxT&      m_MainClass;
+    UserCallbacksI&        m_UserCallbacks;    ///< Interface to get the password from the user.
+    FbxManager*            m_SdkManager;
+    FbxScene*              m_Scene;
+    FbxImporter*           m_Importer;
+    ArrayT<const FbxNode*> m_Nodes;
 };
 
 
 LoaderFbxT::FbxSceneT::FbxSceneT(const LoaderFbxT& MainClass, UserCallbacksI& UserCallbacks, const std::string& FileName)
     : m_MainClass(MainClass),
       m_UserCallbacks(UserCallbacks),
-      m_SdkManager(KFbxSdkManager::Create()),
-      m_Scene(KFbxScene::Create(m_SdkManager, "")),
-      m_Importer(KFbxImporter::Create(m_SdkManager, ""))
+      m_SdkManager(FbxManager::Create()),
+      m_Scene(FbxScene::Create(m_SdkManager, "")),
+      m_Importer(FbxImporter::Create(m_SdkManager, ""))
 {
     Log << "\nBeginning import of \"" << FileName << "\" ...\n";
 
@@ -149,9 +151,9 @@ LoaderFbxT::FbxSceneT::FbxSceneT(const LoaderFbxT& MainClass, UserCallbacksI& Us
 
     bool Result=m_Importer->Import(m_Scene);
 
-    if (!Result && m_Importer->GetLastErrorID()==KFbxIO::ePASSWORD_ERROR)
+    if (!Result && m_Importer->GetLastErrorID()==FbxIOBase::ePasswordError)
     {
-        const KString Password=UserCallbacks.GetPasswordFromUser("Please enter the password to open file\n" + FileName).c_str();
+        const FbxString Password=UserCallbacks.GetPasswordFromUser("Please enter the password to open file\n" + FileName).c_str();
 
         m_SdkManager->GetIOSettings()->SetStringProp(IMP_FBX_PASSWORD, Password);
         m_SdkManager->GetIOSettings()->SetBoolProp(IMP_FBX_PASSWORD_ENABLE, true);
@@ -170,15 +172,15 @@ LoaderFbxT::FbxSceneT::FbxSceneT(const LoaderFbxT& MainClass, UserCallbacksI& Us
 
     // The coordinate system of 3D Studio Max happens to be the same as Cafu's (x: right, y: into screen, z: up),
     // thus make sure that the scene is converted to this coordinate system if necessary.
-    if (m_Scene->GetGlobalSettings().GetAxisSystem()!=KFbxAxisSystem::Max)
+    if (m_Scene->GetGlobalSettings().GetAxisSystem()!=FbxAxisSystem::Max)
     {
         Log << "Converting coordinate system to Cafu's...\n";
-        KFbxAxisSystem::Max.ConvertScene(m_Scene);
+        FbxAxisSystem::Max.ConvertScene(m_Scene);
     }
 
 
     // Let the user know how many centimeters one scene unit is.
-    const KFbxSystemUnit SysUnit=m_Scene->GetGlobalSettings().GetSystemUnit();
+    const FbxSystemUnit SysUnit=m_Scene->GetGlobalSettings().GetSystemUnit();
 
     Log << "Scene unit info:\n"
         << "    scale factor: one scene unit is " << SysUnit.GetScaleFactor() << " cm (" << (SysUnit.GetScaleFactor()/2.54) << " inches)\n"
@@ -186,7 +188,7 @@ LoaderFbxT::FbxSceneT::FbxSceneT(const LoaderFbxT& MainClass, UserCallbacksI& Us
 
     // if (SysUnit.GetScaleFactor()!=1.0)
     // {
-    //     KFbxSystemUnit CafuSystemUnit(1.0);
+    //     FbxSystemUnit CafuSystemUnit(1.0);
     //     CafuSystemUnit.ConvertScene(gScene);
     // }
 
@@ -207,7 +209,7 @@ LoaderFbxT::FbxSceneT::FbxSceneT(const LoaderFbxT& MainClass, UserCallbacksI& Us
 
     for (int PoseNr=0; PoseNr<m_Scene->GetPoseCount(); PoseNr++)
     {
-        const KFbxPose* Pose=m_Scene->GetPose(PoseNr);
+        const FbxPose* Pose=m_Scene->GetPose(PoseNr);
 
         Log << "    " << PoseNr;
         if (Pose->IsBindPose()) Log << ", bind pose";
@@ -227,29 +229,29 @@ LoaderFbxT::FbxSceneT::FbxSceneT(const LoaderFbxT& MainClass, UserCallbacksI& Us
 
     for (unsigned long NodeNr=0; NodeNr<m_Nodes.Size(); NodeNr++)
     {
-        const KFbxNode*           Node          =m_Nodes[NodeNr];
-        const KFbxLayerContainer* LayerContainer=KFbxCast<KFbxLayerContainer>(Node->GetNodeAttribute());    // Must use KFbxCast<T> instead of dynamic_cast<T*> for classes of the FBX SDK.
+        const FbxNode*           Node          =m_Nodes[NodeNr];
+        const FbxLayerContainer* LayerContainer=FbxCast<FbxLayerContainer>(Node->GetNodeAttribute());    // Must use FbxCast<T> instead of dynamic_cast<T*> for classes of the FBX SDK.
 
         if (LayerContainer)   // Typically a mesh, but can also be a Nurb, a patch, etc.
         {
-            Log << "    Node " << NodeNr << " has " << Node->GetSrcObjectCount(KFbxSurfaceMaterial::ClassId) << " material(s)\n";
-            const int lNbMat=Node->GetSrcObjectCount(KFbxSurfaceMaterial::ClassId);
+            Log << "    Node " << NodeNr << " has " << Node->GetSrcObjectCount(FbxSurfaceMaterial::ClassId) << " material(s)\n";
+            const int lNbMat=Node->GetSrcObjectCount(FbxSurfaceMaterial::ClassId);
 
             for (int lMaterialIndex=0; lMaterialIndex<lNbMat; lMaterialIndex++)
             {
-                KFbxSurfaceMaterial* lMaterial=KFbxCast<KFbxSurfaceMaterial>(Node->GetSrcObject(KFbxSurfaceMaterial::ClassId, lMaterialIndex));
+                FbxSurfaceMaterial* lMaterial=FbxCast<FbxSurfaceMaterial>(Node->GetSrcObject(FbxSurfaceMaterial::ClassId, lMaterialIndex));
 
                 if (lMaterial)
                 {
-                    KFbxProperty lProperty=lMaterial->FindProperty(KFbxSurfaceMaterial::sDiffuse);
+                    FbxProperty lProperty=lMaterial->FindProperty(FbxSurfaceMaterial::sDiffuse);
 
                     if (lProperty.IsValid())
                     {
-                        const int lNbTex = lProperty.GetSrcObjectCount(KFbxFileTexture::ClassId);
+                        const int lNbTex = lProperty.GetSrcObjectCount(FbxFileTexture::ClassId);
 
                         for (int lTextureIndex=0; lTextureIndex<lNbTex; lTextureIndex++)
                         {
-                            KFbxFileTexture* lTexture=KFbxCast<KFbxFileTexture>(lProperty.GetSrcObject(KFbxFileTexture::ClassId, lTextureIndex));
+                            FbxFileTexture* lTexture=FbxCast<FbxFileTexture>(lProperty.GetSrcObject(FbxFileTexture::ClassId, lTextureIndex));
 
                             //if (lTexture)
                             //    LoadTexture(lTexture, pTextureArray);
@@ -277,7 +279,7 @@ void LoaderFbxT::FbxSceneT::CleanUp()
 }
 
 
-void LoaderFbxT::FbxSceneT::GetNodes(const KFbxNode* Node)
+void LoaderFbxT::FbxSceneT::GetNodes(const FbxNode* Node)
 {
     m_Nodes.PushBack(Node);
 
@@ -286,18 +288,18 @@ void LoaderFbxT::FbxSceneT::GetNodes(const KFbxNode* Node)
 }
 
 
-void LoaderFbxT::FbxSceneT::ConvertNurbsAndPatches(KFbxNode* Node)
+void LoaderFbxT::FbxSceneT::ConvertNurbsAndPatches(FbxNode* Node)
 {
-    KFbxNodeAttribute* NodeAttribute=Node->GetNodeAttribute();
+    FbxNodeAttribute* NodeAttribute=Node->GetNodeAttribute();
 
     if (NodeAttribute)
     {
-        if (NodeAttribute->GetAttributeType()==KFbxNodeAttribute::eNURB ||
-            NodeAttribute->GetAttributeType()==KFbxNodeAttribute::ePATCH)
+        if (NodeAttribute->GetAttributeType()==FbxNodeAttribute::eNurbs ||
+            NodeAttribute->GetAttributeType()==FbxNodeAttribute::ePatch)
         {
-            KFbxGeometryConverter Converter(m_SdkManager);
+            FbxGeometryConverter Converter(m_SdkManager);
 
-            Log << "Node \"" << Node->GetName() << "\" is a " << (NodeAttribute->GetAttributeType()==KFbxNodeAttribute::eNURB ? "NURB" : "Patch") << ", triangulating...\n";
+            Log << "Node \"" << Node->GetName() << "\" is a " << (NodeAttribute->GetAttributeType()==FbxNodeAttribute::eNurbs ? "Nurbs" : "Patch") << ", triangulating...\n";
             Converter.TriangulateInPlace(Node);
         }
     }
@@ -307,7 +309,7 @@ void LoaderFbxT::FbxSceneT::ConvertNurbsAndPatches(KFbxNode* Node)
 }
 
 
-void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::JointT>& Joints, int ParentIndex, const KFbxNode* Node) const
+void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::JointT>& Joints, int ParentIndex, const FbxNode* Node) const
 {
     Log << "Loading node " << Joints.Size() << ", \"" << Node->GetName() << "\", Parent == " << ParentIndex << "\n";
  // Log << "        Character Link Count: " << Node->GetCharacterLinkCount() << "\n";
@@ -321,40 +323,41 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::JointT>& Joints, int ParentI
     {
         switch (Node->GetNodeAttribute()->GetAttributeType())
         {
-            case KFbxNodeAttribute::eUNIDENTIFIED      : Log << "        eUNIDENTIFIED      \n"; break;
-            case KFbxNodeAttribute::eNULL              : Log << "        eNULL              \n"; break;
-            case KFbxNodeAttribute::eMARKER            : Log << "        eMARKER            \n"; break;
-            case KFbxNodeAttribute::eSKELETON          : Log << "        eSKELETON          \n"; break;
-            case KFbxNodeAttribute::eMESH              : Log << "        eMESH              \n"; break;
-            case KFbxNodeAttribute::eNURB              : Log << "        eNURB              \n"; break;
-            case KFbxNodeAttribute::ePATCH             : Log << "        ePATCH             \n"; break;
-            case KFbxNodeAttribute::eCAMERA            : Log << "        eCAMERA            \n"; break;
-            case KFbxNodeAttribute::eCAMERA_STEREO     : Log << "        eCAMERA_STEREO     \n"; break;
-            case KFbxNodeAttribute::eCAMERA_SWITCHER   : Log << "        eCAMERA_SWITCHER   \n"; break;
-            case KFbxNodeAttribute::eLIGHT             : Log << "        eLIGHT             \n"; break;
-            case KFbxNodeAttribute::eOPTICAL_REFERENCE : Log << "        eOPTICAL_REFERENCE \n"; break;
-            case KFbxNodeAttribute::eOPTICAL_MARKER    : Log << "        eOPTICAL_MARKER    \n"; break;
-            case KFbxNodeAttribute::eNURBS_CURVE       : Log << "        eNURBS_CURVE       \n"; break;
-            case KFbxNodeAttribute::eTRIM_NURBS_SURFACE: Log << "        eTRIM_NURBS_SURFACE\n"; break;
-            case KFbxNodeAttribute::eBOUNDARY          : Log << "        eBOUNDARY          \n"; break;
-            case KFbxNodeAttribute::eNURBS_SURFACE     : Log << "        eNURBS_SURFACE     \n"; break;
-            case KFbxNodeAttribute::eSHAPE             : Log << "        eSHAPE             \n"; break;
-            case KFbxNodeAttribute::eLODGROUP          : Log << "        eLODGROUP          \n"; break;
-            case KFbxNodeAttribute::eSUBDIV            : Log << "        eSUBDIV            \n"; break;
-            case KFbxNodeAttribute::eCACHED_EFFECT     : Log << "        eCACHED_EFFECT     \n"; break;
-            default:                                     Log << "        [UNKNOWN ATTRIBUTE]\n"; break;
+            case FbxNodeAttribute::eUnknown         : Log << "        eUnknown         \n"; break;
+            case FbxNodeAttribute::eNull            : Log << "        eNull            \n"; break;
+            case FbxNodeAttribute::eMarker          : Log << "        eMarker          \n"; break;
+            case FbxNodeAttribute::eSkeleton        : Log << "        eSkeleton        \n"; break;
+            case FbxNodeAttribute::eMesh            : Log << "        eMesh            \n"; break;
+            case FbxNodeAttribute::eNurbs           : Log << "        eNurbs           \n"; break;
+            case FbxNodeAttribute::ePatch           : Log << "        ePatch           \n"; break;
+            case FbxNodeAttribute::eCamera          : Log << "        eCamera          \n"; break;
+            case FbxNodeAttribute::eCameraStereo    : Log << "        eCameraStereo    \n"; break;
+            case FbxNodeAttribute::eCameraSwitcher  : Log << "        eCameraSwitcher  \n"; break;
+            case FbxNodeAttribute::eLight           : Log << "        eLight           \n"; break;
+            case FbxNodeAttribute::eOpticalReference: Log << "        eOpticalReference\n"; break;
+            case FbxNodeAttribute::eOpticalMarker   : Log << "        eOpticalMarker   \n"; break;
+            case FbxNodeAttribute::eNurbsCurve      : Log << "        eNurbsCurve      \n"; break;
+            case FbxNodeAttribute::eTrimNurbsSurface: Log << "        eTrimNurbsSurface\n"; break;
+            case FbxNodeAttribute::eBoundary        : Log << "        eBoundary        \n"; break;
+            case FbxNodeAttribute::eNurbsSurface    : Log << "        eNurbsSurface    \n"; break;
+            case FbxNodeAttribute::eShape           : Log << "        eShape           \n"; break;
+            case FbxNodeAttribute::eLODGroup        : Log << "        eLODGroup        \n"; break;
+            case FbxNodeAttribute::eSubDiv          : Log << "        eSubDiv          \n"; break;
+            case FbxNodeAttribute::eCachedEffect    : Log << "        eCachedEffect    \n"; break;
+            case FbxNodeAttribute::eLine            : Log << "        eLine            \n"; break;
+            default:                                   Log << "        [UNKNOWN ATTRIB] \n"; break;
         }
     }
 
-    // Note that KFbxAnimEvaluator::GetNodeLocalTransform() is the proper method to call here:
+    // Note that FbxAnimEvaluator::GetNodeLocalTransform() is the proper method to call here:
     // It returns the node's default transformation matrix or the node's actual transformation
     // matrix at a specified point in time (depending on its second parameter pTime).
     // See FBX SDK Programmer's Guide pages 89 and 90 and its API method documentation for details.
-    // Also see KFbxAnimEvaluator::SetContext(): as we set no anim stack, it automatically uses the first in the scene.
-    const KFbxXMatrix& Transform  =m_Scene->GetEvaluator()->GetNodeLocalTransform(const_cast<KFbxNode*>(Node));
-    KFbxVector4        Translation=Transform.GetT();
-    KFbxQuaternion     Quaternion =Transform.GetQ();
-    KFbxVector4        Scale      =Transform.GetS();
+    // Also see FbxAnimEvaluator::SetContext(): as we set no anim stack, it automatically uses the first in the scene.
+    const FbxAMatrix& Transform  =m_Scene->GetEvaluator()->GetNodeLocalTransform(const_cast<FbxNode*>(Node));
+    FbxVector4        Translation=Transform.GetT();
+    FbxQuaternion     Quaternion =Transform.GetQ();
+    FbxVector4        Scale      =Transform.GetS();
 
     Quaternion.Normalize();
     if (Quaternion[3]>0) Quaternion=-Quaternion;
@@ -385,13 +388,13 @@ namespace
 {
     // This function is from file GetPosition.cxx of the Autodesk SDK ViewScene example:
     // Get the geometry deformation local to a node. It is never inherited by the children.
-    KFbxXMatrix GetGeometry(const KFbxNode* pNode)
+    FbxAMatrix GetGeometry(const FbxNode* pNode)
     {
-        KFbxXMatrix GeometryMat;
+        FbxAMatrix GeometryMat;
 
-        GeometryMat.SetT(pNode->GetGeometricTranslation(KFbxNode::eSOURCE_SET));
-        GeometryMat.SetR(pNode->GetGeometricRotation   (KFbxNode::eSOURCE_SET));
-        GeometryMat.SetS(pNode->GetGeometricScaling    (KFbxNode::eSOURCE_SET));
+        GeometryMat.SetT(pNode->GetGeometricTranslation(FbxNode::eSourcePivot));
+        GeometryMat.SetR(pNode->GetGeometricRotation   (FbxNode::eSourcePivot));
+        GeometryMat.SetS(pNode->GetGeometricScaling    (FbxNode::eSourcePivot));
 
         return GeometryMat;
     }
@@ -399,10 +402,10 @@ namespace
 
 
 /// Returns, for each vertex in the mesh, the list of weights that affect it.
-void LoaderFbxT::FbxSceneT::GetWeights(const KFbxMesh* Mesh, const unsigned long MeshNodeNr, ArrayT< ArrayT<CafuModelT::MeshT::WeightT> >& Weights) const
+void LoaderFbxT::FbxSceneT::GetWeights(const FbxMesh* Mesh, const unsigned long MeshNodeNr, ArrayT< ArrayT<CafuModelT::MeshT::WeightT> >& Weights) const
 {
     // All the links must have the same link mode.
-    KFbxCluster::ELinkMode ClusterMode=KFbxCluster::eNORMALIZE;     // Updated below.
+    FbxCluster::ELinkMode ClusterMode=FbxCluster::eNormalize;     // Updated below.
 
     Weights.PushBackEmptyExact(Mesh->GetControlPointsCount());
 
@@ -412,17 +415,17 @@ void LoaderFbxT::FbxSceneT::GetWeights(const KFbxMesh* Mesh, const unsigned long
 
         switch (Mesh->GetDeformer(DeformerNr)->GetDeformerType())
         {
-            case KFbxDeformer::eSKIN:         Log << "eSKIN\n"; break;
-            case KFbxDeformer::eVERTEX_CACHE: Log << "eVERTEX_CACHE\n"; break;
-            default:                          Log << "[unknown deformer type]\n"; break;
+            case FbxDeformer::eSkin:        Log << "eSkin\n"; break;
+            case FbxDeformer::eVertexCache: Log << "eVertexCache\n"; break;
+            default:                        Log << "[unknown deformer type]\n"; break;
         }
 
-        KFbxSkin* Skin=KFbxCast<KFbxSkin>(Mesh->GetDeformer(DeformerNr));   // Must use KFbxCast<T> instead of dynamic_cast<T*> for classes of the FBX SDK.
+        FbxSkin* Skin=FbxCast<FbxSkin>(Mesh->GetDeformer(DeformerNr));   // Must use FbxCast<T> instead of dynamic_cast<T*> for classes of the FBX SDK.
 
         if (Skin && Skin->GetClusterCount()>0)
         {
-            ArrayT<KFbxVector4> GlobalBindPose;
-            KFbxXMatrix         MeshToGlobalBindPose;
+            ArrayT<FbxVector4> GlobalBindPose;
+            FbxAMatrix         MeshToGlobalBindPose;
 
             // Transform the vertices from the local space of Mesh to bind pose in global space.
             GlobalBindPose.PushBackEmptyExact(Mesh->GetControlPointsCount());
@@ -437,7 +440,7 @@ void LoaderFbxT::FbxSceneT::GetWeights(const KFbxMesh* Mesh, const unsigned long
             // http://area.autodesk.com/forum/autodesk-fbx/fbx-sdk/getting-the-local-transformation-matrix-for-the-vertices-of-a-cluster/
             for (int ClusterNr=0; ClusterNr<Skin->GetClusterCount(); ClusterNr++)
             {
-                const KFbxCluster* Cluster =Skin->GetCluster(ClusterNr);
+                const FbxCluster*  Cluster =Skin->GetCluster(ClusterNr);
                 const unsigned int JointIdx=m_Nodes.Find(Cluster->GetLink());
 
                 Log << "        cluster " << ClusterNr << ", link mode: " << Cluster->GetLinkMode() << "\n";
@@ -448,9 +451,9 @@ void LoaderFbxT::FbxSceneT::GetWeights(const KFbxMesh* Mesh, const unsigned long
                 ClusterMode=Cluster->GetLinkMode();
 
                 // Get the matrix that transforms the vertices from global space to local bone space in bind pose.
-                KFbxXMatrix BoneBindingMatrix;
+                FbxAMatrix BoneBindingMatrix;
                 Cluster->GetTransformLinkMatrix(BoneBindingMatrix);
-                KFbxXMatrix GlobalToLocalBoneBindPose=BoneBindingMatrix.Inverse();
+                FbxAMatrix GlobalToLocalBoneBindPose=BoneBindingMatrix.Inverse();
 
                 for (int i=0; i<Cluster->GetControlPointIndicesCount(); i++)
                 {
@@ -483,17 +486,17 @@ void LoaderFbxT::FbxSceneT::GetWeights(const KFbxMesh* Mesh, const unsigned long
         {
             switch (ClusterMode)
             {
-                case KFbxCluster::eNORMALIZE:
+                case FbxCluster::eNormalize:
                     for (unsigned long WNr=0; WNr<Weights[VertexNr].Size(); WNr++)
                         Weights[VertexNr][WNr].Weight/=wSum;
                     break;
 
-                case KFbxCluster::eTOTAL1:
+                case FbxCluster::eTotalOne:
                     if (wSum!=1.0f)
                         Weights[VertexNr].PushBack(CreateWeight(MeshNodeNr, 1.0f-wSum, conv(Mesh->GetControlPoints()[VertexNr])));
                     break;
 
-                case KFbxCluster::eADDITIVE:
+                case FbxCluster::eAdditive:
                     // This case is not implemented/supported yet.
                     break;
             }
@@ -504,13 +507,13 @@ void LoaderFbxT::FbxSceneT::GetWeights(const KFbxMesh* Mesh, const unsigned long
 
 namespace
 {
-    std::string GetTexFileName(const KFbxSurfaceMaterial* FbxMaterial, const char* PropName)
+    std::string GetTexFileName(const FbxSurfaceMaterial* FbxMaterial, const char* PropName)
     {
-        KFbxProperty Property=FbxMaterial->FindProperty(PropName);
+        FbxProperty Property=FbxMaterial->FindProperty(PropName);
         if (!Property.IsValid()) return "";
 
-        const int        TextureIndex=0;
-        KFbxFileTexture* Texture=KFbxCast<KFbxFileTexture>(Property.GetSrcObject(KFbxFileTexture::ClassId, TextureIndex));  // Must use KFbxCast<T> instead of dynamic_cast<T*> for classes of the FBX SDK.
+        const int       TextureIndex=0;
+        FbxFileTexture* Texture=Property.GetSrcObject<FbxFileTexture>(TextureIndex);
         if (!Texture) return "";
 
         const char* FileName=Texture->GetRelativeFileName();
@@ -524,29 +527,29 @@ namespace
 }
 
 
-/// Attempts to load a MaterialT material from a KFbxSurfaceMaterial.
+/// Attempts to load a MaterialT material from a FbxSurfaceMaterial.
 /// @param Mat           The material to initialize.
 /// @param FbxMaterial   The source material.
 /// @returns \c true on success (\c Mat could be successfully/meaningfully initialized from \c FbxMaterial), \c false otherwise.
-bool LoaderFbxT::FbxSceneT::LoadMaterial(MaterialT& Mat, const KFbxSurfaceMaterial* FbxMaterial) const
+bool LoaderFbxT::FbxSceneT::LoadMaterial(MaterialT& Mat, const FbxSurfaceMaterial* FbxMaterial) const
 {
     const std::string BaseDir=cf::String::GetPath(m_MainClass.GetFileName())+"/";
 
     if (!FbxMaterial) return false;
 
-    std::string fn=GetTexFileName(FbxMaterial, KFbxSurfaceMaterial::sDiffuse);
+    std::string fn=GetTexFileName(FbxMaterial, FbxSurfaceMaterial::sDiffuse);
     if (fn!="") Mat.DiffMapComp=MapCompositionT(fn, BaseDir); else return false;
 
-    fn=GetTexFileName(FbxMaterial, KFbxSurfaceMaterial::sNormalMap);
+    fn=GetTexFileName(FbxMaterial, FbxSurfaceMaterial::sNormalMap);
     if (fn!="") Mat.NormMapComp=MapCompositionT(fn, BaseDir);
 
-    fn=GetTexFileName(FbxMaterial, KFbxSurfaceMaterial::sBump);
+    fn=GetTexFileName(FbxMaterial, FbxSurfaceMaterial::sBump);
     if (fn!="") Mat.NormMapComp=MapCompositionT(std::string("hm2nm(")+fn+", 1)", BaseDir);
 
-    fn=GetTexFileName(FbxMaterial, KFbxSurfaceMaterial::sSpecular);
+    fn=GetTexFileName(FbxMaterial, FbxSurfaceMaterial::sSpecular);
     if (fn!="") Mat.SpecMapComp=MapCompositionT(fn, BaseDir);
 
-    fn=GetTexFileName(FbxMaterial, KFbxSurfaceMaterial::sEmissive);
+    fn=GetTexFileName(FbxMaterial, FbxSurfaceMaterial::sEmissive);
     if (fn!="") Mat.LumaMapComp=MapCompositionT(fn, BaseDir);
 
     Mat.RedGen  =ExpressionT(ExpressionT::SymbolALRed);
@@ -563,7 +566,7 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialMana
 
     for (unsigned long NodeNr=0; NodeNr<m_Nodes.Size(); NodeNr++)
     {
-        const KFbxMesh* Mesh=KFbxCast<KFbxMesh>(m_Nodes[NodeNr]->GetNodeAttribute());   // Must use KFbxCast<T> instead of dynamic_cast<T*> for classes of the FBX SDK.
+        const FbxMesh* Mesh=FbxCast<FbxMesh>(m_Nodes[NodeNr]->GetNodeAttribute());   // Must use FbxCast<T> instead of dynamic_cast<T*> for classes of the FBX SDK.
 
         if (!Mesh) continue;
         Log << "Node " << NodeNr << " is a mesh with " << Mesh->GetPolygonCount() << " polygons and " << Mesh->GetDeformerCount() << " deformers.\n";
@@ -588,12 +591,12 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialMana
         }
 
         // Create the list of triangles, also creating the list of vertices as we go.
-        const KFbxLayerElement::EMappingMode        MappingMode=(Mesh->GetLayer(0) && Mesh->GetLayer(0)->GetUVs()) ? Mesh->GetLayer(0)->GetUVs()->GetMappingMode() : KFbxLayerElement::eNONE;
-        KFbxLayerElementArrayTemplate<KFbxVector2>* UVArray    =NULL;
-        const KFbxLayerElementSmoothing*            SmoothingLE=NULL;
-        std::map<uint64_t, unsigned int>            UniqueVertices;     // Maps tuples of (Mesh->GetPolygonVertex(), Mesh->GetTextureUVIndex()) to indices into CafuMesh.Vertices.
+        const FbxLayerElement::EMappingMode       MappingMode=(Mesh->GetLayer(0) && Mesh->GetLayer(0)->GetUVs()) ? Mesh->GetLayer(0)->GetUVs()->GetMappingMode() : FbxLayerElement::eNone;
+        FbxLayerElementArrayTemplate<FbxVector2>* UVArray    =NULL;
+        const FbxLayerElementSmoothing*           SmoothingLE=NULL;
+        std::map<uint64_t, unsigned int>          UniqueVertices;  // Maps tuples of (Mesh->GetPolygonVertex(), Mesh->GetTextureUVIndex()) to indices into CafuMesh.Vertices.
 
-        Mesh->GetTextureUV(&UVArray, KFbxLayerElement::eDIFFUSE_TEXTURES);
+        Mesh->GetTextureUV(&UVArray, FbxLayerElement::eTextureDiffuse);
 
         if (Mesh->GetLayer(0))
         {
@@ -613,15 +616,15 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialMana
 
             if (SmoothingLE)
             {
-                if (SmoothingLE->GetMappingMode() == KFbxGeometryElement::eBY_POLYGON)
+                if (SmoothingLE->GetMappingMode() == FbxGeometryElement::eByPolygon)
                 {
                     switch (SmoothingLE->GetReferenceMode())
                     {
-                        case KFbxGeometryElement::eDIRECT:
+                        case FbxGeometryElement::eDirect:
                             SmoothingGroups = SmoothingLE->GetDirectArray().GetAt(PolyNr);
                             break;
 
-                        case KFbxGeometryElement::eINDEX_TO_DIRECT:
+                        case FbxGeometryElement::eIndexToDirect:
                             SmoothingGroups = SmoothingLE->GetDirectArray().GetAt(SmoothingLE->GetIndexArray().GetAt(PolyNr));
                             break;
 
@@ -630,7 +633,7 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialMana
                             break;
                     }
                 }
-                else if (SmoothingLE->GetMappingMode() == KFbxGeometryElement::eBY_EDGE)
+                else if (SmoothingLE->GetMappingMode() == FbxGeometryElement::eByEdge)
                 {
                     // Unfortunately, we cannot deal with Maya-style smoothing info (hard vs. soft edges).
                 }
@@ -644,8 +647,8 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialMana
                 for (unsigned int i=0; i<3; i++)
                 {
                     const int VertexIdx=Mesh->GetPolygonVertex(PolyNr, TriVIs[i]);
-                    const int TexUV_Idx=(MappingMode==KFbxLayerElement::eBY_POLYGON_VERTEX) ? const_cast<KFbxMesh*>(Mesh)->GetTextureUVIndex(PolyNr, TriVIs[i])
-                                       /*MappingMode==KFbxLayerElement::eBY_CONTROL_POINT*/ : VertexIdx;
+                    const int TexUV_Idx=(MappingMode==FbxLayerElement::eByPolygonVertex) ? const_cast<FbxMesh*>(Mesh)->GetTextureUVIndex(PolyNr, TriVIs[i])
+                                       /*MappingMode==FbxLayerElement::eByControlPoint*/ : VertexIdx;
 
                     const uint64_t Tuple=(uint64_t(uint32_t(VertexIdx)) << 32) | uint64_t(uint32_t(TexUV_Idx));
                     const std::map<uint64_t, unsigned int>::const_iterator It=UniqueVertices.find(Tuple);
@@ -675,9 +678,9 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialMana
         }
 
         // Set the material.
-        const int                  FbxMaterialIndex=0;
-        const KFbxSurfaceMaterial* FbxMaterial=m_Nodes[NodeNr]->GetMaterial(FbxMaterialIndex);
-        const std::string          MatName=FbxMaterial ? FbxMaterial->GetName() : "wire-frame";
+        const int                 FbxMaterialIndex=0;
+        const FbxSurfaceMaterial* FbxMaterial=m_Nodes[NodeNr]->GetMaterial(FbxMaterialIndex);
+        const std::string         MatName=FbxMaterial ? FbxMaterial->GetName() : "wire-frame";
 
         CafuMesh.Material=MaterialMan.GetMaterial(MatName);
 
@@ -696,18 +699,18 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::MeshT>& Meshes, MaterialMana
 
 namespace
 {
-    ArrayT<KTime> GetFrameTimes(const KFbxAnimStack* AnimStack, const KTime& TimeStep)
+    ArrayT<FbxTime> GetFrameTimes(const FbxAnimStack* AnimStack, const FbxTime& TimeStep)
     {
-        ArrayT<KTime> FrameTimes;
+        ArrayT<FbxTime> FrameTimes;
 
-        const KTime TimeStart=AnimStack->GetLocalTimeSpan().GetStart();
-        const KTime TimeStop =AnimStack->GetLocalTimeSpan().GetStop();
+        const FbxTime TimeStart=AnimStack->GetLocalTimeSpan().GetStart();
+        const FbxTime TimeStop =AnimStack->GetLocalTimeSpan().GetStop();
 
         Log << "    " << "start: " << TimeStart.Get() << " (" << TimeStart.GetSecondDouble() << ")";
         Log <<    " " << "stop: "  << TimeStop.Get()  << " (" << TimeStop.GetSecondDouble()  << ")";
         Log <<    " " << "step: "  << TimeStep.Get()  << " (" << TimeStep.GetSecondDouble()  << ")" << "\n";
 
-        for (KTime TimeNow=TimeStart; TimeNow<=TimeStop; TimeNow+=TimeStep)
+        for (FbxTime TimeNow=TimeStart; TimeNow<=TimeStop; TimeNow+=TimeStep)
         {
             FrameTimes.PushBack(TimeNow);
 
@@ -726,7 +729,7 @@ namespace
 
 /// Gathers all animation data of a sequence (AnimStack) in uncompressed form in an array of the form SequData[NodeNr][FrameNr].
 /// That is, for each frame and for each node, we store the position, quaternion and scale.
-ArrayT< ArrayT<PosQtrScaleT> > LoaderFbxT::FbxSceneT::GetSequData(KFbxAnimStack* AnimStack, const ArrayT<KTime>& FrameTimes) const
+ArrayT< ArrayT<PosQtrScaleT> > LoaderFbxT::FbxSceneT::GetSequData(FbxAnimStack* AnimStack, const ArrayT<FbxTime>& FrameTimes) const
 {
     ArrayT< ArrayT<PosQtrScaleT> > SequData;
 
@@ -739,10 +742,10 @@ ArrayT< ArrayT<PosQtrScaleT> > LoaderFbxT::FbxSceneT::GetSequData(KFbxAnimStack*
 
         for (unsigned long FrameNr=0; FrameNr<FrameTimes.Size(); FrameNr++)
         {
-            const KFbxXMatrix& Transform  =m_Scene->GetEvaluator()->GetNodeLocalTransform(const_cast<KFbxNode*>(m_Nodes[NodeNr]), FrameTimes[FrameNr]);
-            KFbxVector4        Translation=Transform.GetT();
-            KFbxQuaternion     Quaternion =Transform.GetQ();
-            KFbxVector4        Scale      =Transform.GetS();
+            const FbxAMatrix& Transform  =m_Scene->GetEvaluator()->GetNodeLocalTransform(const_cast<FbxNode*>(m_Nodes[NodeNr]), FrameTimes[FrameNr]);
+            FbxVector4        Translation=Transform.GetT();
+            FbxQuaternion     Quaternion =Transform.GetQ();
+            FbxVector4        Scale      =Transform.GetS();
 
             Quaternion.Normalize();
             if (Quaternion[3]>0) Quaternion=-Quaternion;
@@ -760,8 +763,8 @@ ArrayT< ArrayT<PosQtrScaleT> > LoaderFbxT::FbxSceneT::GetSequData(KFbxAnimStack*
 
 void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::AnimT>& Anims) const
 {
-    KTime                    TimeStep;
-    KArrayTemplate<KString*> AnimStackNames;
+    FbxTime              TimeStep;
+    FbxArray<FbxString*> AnimStackNames;
 
     TimeStep.SetTime(0, 0, 0, 1, 0, m_Scene->GetGlobalSettings().GetTimeMode());
     m_Scene->FillAnimStackNameArray(AnimStackNames);
@@ -773,16 +776,16 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::AnimT>& Anims) const
 
     for (int NameNr=0; NameNr<AnimStackNames.GetCount(); NameNr++)
     {
-        KFbxAnimStack* AnimStack=m_Scene->FindMember(FBX_TYPE(KFbxAnimStack), AnimStackNames[NameNr]->Buffer());
+        FbxAnimStack* AnimStack=m_Scene->FindMember<FbxAnimStack>(AnimStackNames[NameNr]->Buffer());
 
         // Make sure that the animation stack was found in the scene (it always should).
         if (AnimStack==NULL) continue;
 
-        const ArrayT<KTime>                  FrameTimes=GetFrameTimes(AnimStack, TimeStep);
+        const ArrayT<FbxTime>                FrameTimes=GetFrameTimes(AnimStack, TimeStep);
         const ArrayT< ArrayT<PosQtrScaleT> > SequData  =GetSequData(AnimStack, FrameTimes);
 
         Log << "    \"" << AnimStackNames[NameNr]->Buffer() << "\"\n";
-        // if (AnimStackNames[NameNr]->Compare(KFbxGet<KString>(m_Scene->ActiveAnimStackName))==0) Log << "    (active)";   // Why does this corrupt the stack under (x86_64) Linux?
+        // if (AnimStackNames[NameNr]->Compare(FbxGet<FbxString>(m_Scene->ActiveAnimStackName))==0) Log << "    (active)";   // Why does this corrupt the stack under (x86_64) Linux?
         Log << "        " << FrameTimes.Size() << " frames\n";
 
 
@@ -844,7 +847,7 @@ void LoaderFbxT::FbxSceneT::Load(ArrayT<CafuModelT::AnimT>& Anims) const
             Anim.Frames[FrameNr].BB=BoundingBox3fT();
     }
 
-    FbxSdkDeleteAndClear(AnimStackNames);
+    FbxArrayDelete(AnimStackNames);
 }
 
 
